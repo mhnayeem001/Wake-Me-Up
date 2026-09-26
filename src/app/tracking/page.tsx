@@ -577,155 +577,78 @@ function TrackingContent() {
         </button>
       </div>
 
-      {/* Bottom Sheet Drawer (Non-Nav Mode) */}
-      {!isNavMode && (
-        <motion.div 
-          initial={{ y: "85%" }}
-          animate={{ y: sheetState === "compact" ? "68%" : "15%" }}
-          transition={{ type: "spring", damping: 25, stiffness: 200 }}
-          drag="y"
-          dragConstraints={{ top: 0, bottom: 0 }}
-          dragElastic={0.2}
-          onDragEnd={(_, info) => {
-            if (info.offset.y < -50) setSheetState("expanded");
-            else if (info.offset.y > 50) setSheetState("compact");
-          }}
-          className="absolute inset-0 z-50 pointer-events-none"
-        >
-          <div className="h-full bg-card/98 backdrop-blur-3xl border-t border-primary/20 rounded-t-[36px] shadow-[0_-25px_60px_rgba(0,0,0,0.4)] pointer-events-auto overflow-hidden flex flex-col">
-            <div 
-              className="w-full py-2.5 flex flex-col items-center gap-1 cursor-grab active:cursor-grabbing shrink-0" 
-              onClick={() => setSheetState(sheetState === "compact" ? "expanded" : "compact")}
-            >
-              <div className="w-10 h-1.5 bg-muted rounded-full" />
-              <span className="text-[8px] font-black text-muted-foreground uppercase tracking-[0.25em] mt-0.5 italic">
-                {sheetState === "compact" ? "▲ Swipe Up for Settings & Places" : "▼ Minimize"}
-              </span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-5 pb-36 scrollbar-hide">
-              <div className="space-y-5 pt-1 max-w-[420px] mx-auto">
-                
-                {/* Radius Selector */}
-                <section>
-                  <div className="flex justify-between items-center mb-2.5 px-1">
-                    <div>
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-muted-foreground italic">Wake Alert Distance</h3>
-                      <p className="text-[8px] text-muted-foreground/70">Alarm fires when you enter this circle</p>
-                    </div>
-                    <div className="px-2.5 py-0.5 bg-primary/10 rounded-lg">
-                      <span className="text-primary font-black text-xs italic tracking-widest">{formatDistance(alertRadius)}</span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {RADIUS_OPTIONS.map(r => (
-                      <button 
-                        key={r} onClick={() => setAlertRadius(r)}
-                        className={cn(
-                          "h-11 rounded-xl text-[10px] font-black transition-all border-2 uppercase tracking-wider active-tap",
-                          alertRadius === r ? "bg-primary border-primary text-white shadow-md shadow-primary/20" : "bg-secondary/50 border-transparent text-muted-foreground hover:bg-secondary"
-                        )}
-                      >
-                        {formatDistance(r)}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                {/* Start Journey Button */}
-                <div className="space-y-2">
-                  <button 
-                    onClick={handleStart} 
-                    disabled={!destination || isStarting}
-                    className="w-full h-15 bg-primary disabled:opacity-20 rounded-2xl flex items-center justify-center gap-3 text-base font-black text-white italic shadow-[0_15px_35px_rgba(37,99,235,0.3)] active:scale-95 transition-all uppercase tracking-tight"
-                  >
-                    {isStarting ? <Loader2 className="animate-spin" size={20} /> : <Play fill="white" size={20} />} 
-                    {isStarting ? "Locating..." : destination ? `Start Trip to ${destinationName?.split(" ")[0]}` : "Pick Destination to Start"}
-                  </button>
-
-                  {startPoint && destination && (
-                    <button
-                      onClick={() => {
-                        prepareAudio();
-                        setIsNavMode(true);
-                        setFollowUser(true);
-                        startSimulation(startPoint, destination, simSpeed);
-                      }}
-                      className="w-full h-11 bg-secondary/80 hover:bg-secondary rounded-xl border border-primary/20 flex items-center justify-center gap-2 text-xs font-black text-primary uppercase tracking-wider active-tap"
-                    >
-                      <FastForward size={15} />
-                      <span>Simulate Journey ({simSpeed}x Speed)</span>
-                    </button>
-                  )}
+      {/* Floating Bottom Action Bar (Non-Nav Mode) — Only shows after destination selected */}
+      <AnimatePresence>
+        {!isNavMode && destination && (
+          <motion.div
+            initial={{ y: 120, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 120, opacity: 0 }}
+            transition={{ type: "spring", damping: 22, stiffness: 220 }}
+            className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom,24px))] left-3 right-3 z-50 max-w-[420px] mx-auto pointer-events-auto"
+          >
+            <div className="bg-card/98 backdrop-blur-3xl p-4 rounded-[28px] border border-primary/20 shadow-[0_25px_70px_rgba(0,0,0,0.6)] space-y-3">
+              {/* Destination & Radius compact row */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <MapPin size={16} className="text-rose-500 shrink-0" />
+                  <p className="text-xs font-black truncate text-foreground">{destinationName}</p>
                 </div>
+                <div className="flex items-center gap-1 bg-secondary/70 p-0.5 rounded-xl shrink-0">
+                  <span className="text-[7px] font-black uppercase tracking-wider text-muted-foreground px-1.5">Alert:</span>
+                  {RADIUS_OPTIONS.map(r => (
+                    <button
+                      key={r}
+                      onClick={() => setAlertRadius(r)}
+                      className={cn(
+                        "px-2 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all active-tap",
+                        alertRadius === r ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {formatDistance(r)}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                {/* Save Current Destination Buttons */}
-                {destination && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => savePlace({ name: destinationName || "Home", address: "Saved Home Location", coords: destination, type: "home" })}
-                      className="h-10 rounded-xl border border-primary/20 bg-secondary/60 text-[9px] font-black uppercase tracking-wider text-foreground flex items-center justify-center gap-1.5 active-tap"
-                    >
-                      <HomeIcon size={13} className="text-blue-500" />
-                      <span>Save as Home</span>
-                    </button>
-                    <button
-                      onClick={() => savePlace({ name: destinationName || "Office", address: "Saved Office Location", coords: destination, type: "office" })}
-                      className="h-10 rounded-xl border border-primary/20 bg-secondary/60 text-[9px] font-black uppercase tracking-wider text-foreground flex items-center justify-center gap-1.5 active-tap"
-                    >
-                      <Briefcase size={13} className="text-purple-500" />
-                      <span>Save as Office</span>
-                    </button>
-                  </div>
+              {/* Start Trip button */}
+              <button
+                onClick={handleStart}
+                disabled={isStarting}
+                className="w-full h-14 bg-primary disabled:opacity-30 rounded-2xl flex items-center justify-center gap-3 text-base font-black text-white italic shadow-[0_15px_35px_rgba(37,99,235,0.3)] active:scale-95 transition-all uppercase tracking-tight"
+              >
+                {isStarting ? <Loader2 className="animate-spin" size={20} /> : <Play fill="white" size={20} />}
+                <span>{isStarting ? "Locating..." : `Start Trip to ${destinationName?.split(" ")[0]}`}</span>
+              </button>
+
+              {/* Quick actions row */}
+              <div className="flex gap-2">
+                {startPoint && (
+                  <button
+                    onClick={() => {
+                      prepareAudio();
+                      setIsNavMode(true);
+                      setFollowUser(true);
+                      startSimulation(startPoint, destination, simSpeed);
+                    }}
+                    className="flex-1 h-10 bg-secondary/70 rounded-xl border border-primary/15 flex items-center justify-center gap-1.5 text-[9px] font-black text-primary uppercase tracking-wider active-tap"
+                  >
+                    <FastForward size={13} />
+                    <span>Simulate {simSpeed}x</span>
+                  </button>
                 )}
-
-                {/* Fixed Locations List */}
-                <section>
-                  <div className="flex justify-between items-center mb-2 px-1">
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-muted-foreground italic">Fixed Places</h3>
-                    <span className="text-[8px] text-muted-foreground/60 font-bold uppercase">1-Tap Select</span>
-                  </div>
-                  <div className="space-y-2">
-                    {savedPlaces.map((place) => (
-                      <div
-                        key={place.id}
-                        className="w-full flex items-center justify-between p-3 bg-card border border-primary/10 rounded-2xl hover:border-primary/30 transition-all group shadow-sm"
-                      >
-                        <button
-                          onClick={() => selectPlace(place)}
-                          className="flex items-center gap-2.5 flex-1 min-w-0 text-left active-tap"
-                        >
-                          <div className="w-8 h-8 bg-secondary rounded-xl flex items-center justify-center shrink-0">
-                            {place.type === "home" ? (
-                              <HomeIcon size={15} className="text-blue-500" />
-                            ) : place.type === "office" ? (
-                              <Briefcase size={15} className="text-purple-500" />
-                            ) : (
-                              <Star size={15} className="text-amber-500" fill="currentColor" fillOpacity={0.2} />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-black uppercase tracking-wider truncate text-foreground">{place.name}</p>
-                            <p className="text-[8px] text-muted-foreground font-bold truncate mt-0.5">{place.address}</p>
-                          </div>
-                        </button>
-
-                        <button
-                          onClick={() => removeSaved(place.id)}
-                          className="p-1.5 text-muted-foreground/40 hover:text-rose-500 transition-colors ml-1 active-tap"
-                          title="Remove Location"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
+                <button
+                  onClick={() => savePlace({ name: destinationName || "Saved", address: "Saved Location", coords: destination, type: "custom" })}
+                  className="flex-1 h-10 bg-secondary/70 rounded-xl border border-primary/15 flex items-center justify-center gap-1.5 text-[9px] font-black text-foreground uppercase tracking-wider active-tap"
+                >
+                  <Star size={13} className="text-amber-500" />
+                  <span>Save Place</span>
+                </button>
               </div>
             </div>
-          </div>
-        </motion.div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Alarm Fullscreen Modal */}
       <AnimatePresence>

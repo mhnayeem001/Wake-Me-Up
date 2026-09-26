@@ -36,20 +36,9 @@ export function useAlarm(settings: AppSettings) {
 
   // Synthesize rich audio alarm pulses using Web Audio API (100% offline & zero network dependency)
   const playSynthesizedAlarm = useCallback((soundType: string, volume: number) => {
-    try {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (!AudioCtx) return;
-
-      if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
-        audioCtxRef.current = new AudioCtx();
-      }
-      const ctx = audioCtxRef.current;
-      if (ctx.state === "suspended") {
-        void ctx.resume();
-      }
-
+    const doPlay = (ctx: AudioContext) => {
       const gainNode = ctx.createGain();
-      gainNode.gain.setValueAtTime(Math.max(0.01, Math.min(1, volume / 100)), ctx.currentTime);
+      gainNode.gain.setValueAtTime(Math.max(0.05, Math.min(1, volume / 100)), ctx.currentTime);
       gainNode.connect(ctx.destination);
 
       const playBeep = () => {
@@ -97,11 +86,38 @@ export function useAlarm(settings: AppSettings) {
         }
       };
 
-      // Play immediately, then loop every 600ms
+      // Play immediately, then loop every 650ms
       playBeep();
       if (oscillatorIntervalRef.current) clearInterval(oscillatorIntervalRef.current);
       oscillatorIntervalRef.current = setInterval(playBeep, 650);
+    };
 
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) {
+        console.warn("Web Audio API not supported in this browser");
+        return;
+      }
+
+      // Always create a fresh context if closed, or reuse existing
+      if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+
+      // Must resume suspended context (browsers auto-suspend until user gesture)
+      if (ctx.state === "suspended") {
+        ctx.resume().then(() => doPlay(ctx)).catch(err => {
+          console.warn("Could not resume AudioContext:", err);
+          // Fallback: create new context and try again
+          try {
+            audioCtxRef.current = new AudioCtx();
+            doPlay(audioCtxRef.current);
+          } catch {}
+        });
+      } else {
+        doPlay(ctx);
+      }
     } catch (err) {
       console.warn("Web Audio synth error:", err);
     }
@@ -142,8 +158,14 @@ export function useAlarm(settings: AppSettings) {
     if (typeof window === "undefined") return;
     try {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (AudioCtx && (!audioCtxRef.current || audioCtxRef.current.state === "closed")) {
-        audioCtxRef.current = new AudioCtx();
+      if (AudioCtx) {
+        if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+          audioCtxRef.current = new AudioCtx();
+        }
+        // Unlock the AudioContext on user gesture (critical for mobile + desktop)
+        if (audioCtxRef.current.state === "suspended") {
+          void audioCtxRef.current.resume().catch(() => {});
+        }
       }
       startBackgroundKeepAlive();
     } catch {}
@@ -164,22 +186,26 @@ export function useAlarm(settings: AppSettings) {
   const triggerAlarm = useCallback(async (message: string) => {
     if (typeof window === "undefined") return;
 
-    // 1. Vibration
+    // 1. Vibration — strong repeating pattern for alarm
     if (settings.vibrate && "vibrate" in navigator) {
-      navigator.vibrate([500, 200, 500, 200, 500, 200, 1000]);
+      try {
+        navigator.vibrate([800, 200, 800, 200, 800, 200, 800, 200, 1500]);
+      } catch {}
     }
 
     // 2. High-reliability Synthesized Sound
     playSynthesizedAlarm(settings.alarmSound, settings.volume);
 
-    // 3. Fallback mp3 audio if available
+    // 3. Fallback mp3 audio — only on native/mobile (avoids CORS/autoplay issues on desktop)
     try {
       if (!audioRef.current) {
-        audioRef.current = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+        audioRef.current = new Audio("/alarm.mp3");
         audioRef.current.loop = true;
       }
       audioRef.current.volume = Math.max(0, Math.min(1, settings.volume / 100));
-      audioRef.current.play().catch(() => {});
+      void audioRef.current.play().catch(() => {
+        // Autoplay blocked — the synthesized Web Audio alarm is the primary fallback
+      });
     } catch {}
 
     // 4. Native / Web Notification (Shows on lock screen)
